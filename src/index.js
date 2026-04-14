@@ -7,7 +7,11 @@ import devicesRouter from "./routes/devices.js";
 import { startPoller } from "./poller/index.js";
 
 const app = express();
-app.use(cors({ origin: "http://localhost:3001" }));
+app.use(
+  cors({
+    origin: ["http://localhost:3001", "https://smiirl-dashboard.vercel.app"],
+  }),
+);
 app.use(express.json());
 
 app.use("/api/auth", authRouter);
