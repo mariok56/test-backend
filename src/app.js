@@ -8,7 +8,7 @@ import adminRouter from "./routes/adminRoutes.js";
 import { requireAuth, requireAdmin } from "./middleware/auth.js";
 
 const app = express();
-app.use(cors({ origin: "*" }));
+app.use(cors({ origin: process.env.CORS_ORIGIN ?? "*" }));
 app.use(express.json());
 
 app.use("/api/auth", authRouter);

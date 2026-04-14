@@ -1,30 +1,57 @@
 import { query } from "../db.js";
 import { getFollowerCount as getMockCount } from "./providers/mock.js";
 
-// Runs once, polls all active devices on their own interval
+// device_id -> intervalId
+const activeIntervals = new Map();
+
+const RECONCILE_MS = 30_000; // re-check DB for new/removed devices every 30s
+
 export async function startPoller() {
   console.log("[poller] starting...");
+  await reconcile();
+  setInterval(reconcile, RECONCILE_MS);
+}
 
-  // Fetch all devices that have a linked social account
-  const { rows: devices } = await query(`
-    SELECT
-      d.id            AS device_id,
-      d.platform,
-      d.poll_interval_seconds,
-      sa.platform_user_id,
-      sa.access_token
-    FROM devices d
-    JOIN social_accounts sa ON sa.device_id = d.id
-    WHERE d.paired_at IS NOT NULL
-  `);
+async function reconcile() {
+  let devices;
+  try {
+    const { rows } = await query(`
+      SELECT
+        d.id            AS device_id,
+        d.platform,
+        d.poll_interval_seconds,
+        sa.platform_user_id,
+        sa.access_token
+      FROM devices d
+      JOIN social_accounts sa ON sa.device_id = d.id
+      WHERE d.paired_at IS NOT NULL
+    `);
+    devices = rows;
+  } catch (err) {
+    console.error("[poller] reconcile query failed:", err.message);
+    return;
+  }
+
+  const currentIds = new Set(devices.map((d) => d.device_id));
+
+  // Clear intervals for devices no longer in the DB
+  for (const [id, intervalId] of activeIntervals) {
+    if (!currentIds.has(id)) {
+      clearInterval(intervalId);
+      activeIntervals.delete(id);
+      console.log(`[poller] stopped polling removed device ${id}`);
+    }
+  }
+
+  // Start intervals for newly paired devices
+  for (const device of devices) {
+    if (!activeIntervals.has(device.device_id)) {
+      scheduleDevice(device);
+    }
+  }
 
   if (devices.length === 0) {
     console.log("[poller] no paired devices found");
-  }
-
-  // Each device gets its own independent interval
-  for (const device of devices) {
-    scheduleDevice(device);
   }
 }
 
@@ -37,38 +64,31 @@ function scheduleDevice(device) {
 
   // Poll immediately once, then on interval
   pollDevice(device);
-  setInterval(() => pollDevice(device), intervalMs);
+  const intervalId = setInterval(() => pollDevice(device), intervalMs);
+  activeIntervals.set(device.device_id, intervalId);
 }
 
 async function pollDevice(device) {
   try {
     const count = await fetchCount(device);
 
-    // Upsert — insert if not exists, update if exists
     await query(
-      `
-      INSERT INTO counts (device_id, value, fetched_at)
-      VALUES ($1, $2, NOW())
-      ON CONFLICT (device_id)
-      DO UPDATE SET value = $2, fetched_at = NOW()
-    `,
+      `INSERT INTO counts (device_id, value, fetched_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (device_id)
+       DO UPDATE SET value = $2, fetched_at = NOW()`,
       [device.device_id, count],
     );
 
     console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {
-    console.error(
-      `[poller] error for device ${device.device_id}:`,
-      err.message,
-    );
+    console.error(`[poller] error for device ${device.device_id}:`, err.message);
   }
 }
 
 async function fetchCount(device) {
-  // Swap this switch when real APIs are ready
   switch (device.platform) {
     case "instagram":
-      return getMockCount(device.platform_user_id);
     case "tiktok":
       return getMockCount(device.platform_user_id);
     default:

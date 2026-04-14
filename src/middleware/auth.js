@@ -18,11 +18,16 @@ export function requireAuth(req, res, next) {
 }
 export async function requireAdmin(req, res, next) {
   // requireAuth must run first — this depends on req.user
-  const { rows } = await query(`SELECT is_admin FROM users WHERE id = $1`, [
-    req.user.userId,
-  ]);
-  if (!rows[0]?.is_admin) {
-    return res.status(403).json({ error: "Forbidden" });
+  try {
+    const { rows } = await query(`SELECT is_admin FROM users WHERE id = $1`, [
+      req.user.userId,
+    ]);
+    if (!rows[0]?.is_admin) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-  next();
 }

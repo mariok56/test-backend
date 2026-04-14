@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from "../db.js";
+import { query, pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -18,9 +18,12 @@ router.post("/pair", async (req, res) => {
   if (!["instagram", "tiktok"].includes(platform))
     return res.status(400).json({ error: "Invalid platform" });
 
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+
     // 1. Create the device row
-    const deviceResult = await query(
+    const deviceResult = await client.query(
       `INSERT INTO devices (owner_id, serial_number, platform, paired_at)
        VALUES ($1, $2, $3, NOW())
        RETURNING id, device_token`,
@@ -30,23 +33,19 @@ router.post("/pair", async (req, res) => {
     const device = deviceResult.rows[0];
 
     // 2. Link the social account
-    await query(
+    await client.query(
       `INSERT INTO social_accounts
          (device_id, platform, platform_user_id, username, access_token)
        VALUES ($1, $2, $3, $4, $5)`,
-      [
-        device.id,
-        platform,
-        platform_user_id,
-        username,
-        access_token || "mock_token",
-      ],
+      [device.id, platform, platform_user_id, username, access_token || "mock_token"],
     );
 
     // 3. Seed an initial count of 0
-    await query(`INSERT INTO counts (device_id, value) VALUES ($1, 0)`, [
+    await client.query(`INSERT INTO counts (device_id, value) VALUES ($1, 0)`, [
       device.id,
     ]);
+
+    await client.query("COMMIT");
 
     res.status(201).json({
       device_id: device.id,
@@ -54,12 +53,13 @@ router.post("/pair", async (req, res) => {
       message: "Device paired successfully",
     });
   } catch (err) {
+    await client.query("ROLLBACK");
     if (err.code === "23505")
-      return res
-        .status(409)
-        .json({ error: "Serial number already registered" });
+      return res.status(409).json({ error: "Serial number already registered" });
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
+  } finally {
+    client.release();
   }
 });
 
