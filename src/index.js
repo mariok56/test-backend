@@ -9,7 +9,10 @@ import { startPoller } from "./poller/index.js";
 const app = express();
 app.use(
   cors({
-    origin: ["http://localhost:3001", "https://smiirl-dashboard.vercel.app"],
+    origin: [
+      "http://localhost:3001",
+      "https://test-dashboard-henna.vercel.app",
+    ],
   }),
 );
 app.use(express.json());
