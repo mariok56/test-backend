@@ -141,3 +141,11 @@ describe("PUT /api/devices/:id/settings", () => {
     expect(res.status).toBe(400);
   });
 });
+describe("GET /api/admin/devices", () => {
+  it("rejects non-admin user", async () => {
+    const res = await request
+      .get("/api/admin/devices")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+});

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { query } from "../db.js";
 
 export function requireAuth(req, res, next) {
   const header = req.headers["authorization"];
@@ -14,4 +15,14 @@ export function requireAuth(req, res, next) {
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+}
+export async function requireAdmin(req, res, next) {
+  // requireAuth must run first — this depends on req.user
+  const { rows } = await query(`SELECT is_admin FROM users WHERE id = $1`, [
+    req.user.userId,
+  ]);
+  if (!rows[0]?.is_admin) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  next();
 }
