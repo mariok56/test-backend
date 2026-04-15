@@ -40,7 +40,16 @@ CREATE TABLE counts (
   fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Count history (time-series — one row per poll tick, for trend charts)
+CREATE TABLE count_history (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  device_id    UUID NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  value        BIGINT NOT NULL,
+  recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Indexes
-CREATE INDEX idx_devices_owner    ON devices(owner_id);
-CREATE INDEX idx_devices_token    ON devices(device_token);
-CREATE INDEX idx_counts_device    ON counts(device_id);
+CREATE INDEX idx_devices_owner         ON devices(owner_id);
+CREATE INDEX idx_devices_token         ON devices(device_token);
+CREATE INDEX idx_counts_device         ON counts(device_id);
+CREATE INDEX idx_count_history_device  ON count_history(device_id, recorded_at DESC);

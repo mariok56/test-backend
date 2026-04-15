@@ -8,7 +8,7 @@ let token, deviceId;
 
 beforeAll(async () => {
   await query(
-    `TRUNCATE users, devices, social_accounts, counts RESTART IDENTITY CASCADE`,
+    `TRUNCATE users, devices, social_accounts, counts, count_history RESTART IDENTITY CASCADE`,
   );
   await request
     .post("/api/auth/register")
@@ -141,10 +141,142 @@ describe("PUT /api/devices/:id/settings", () => {
     expect(res.status).toBe(400);
   });
 });
+describe("GET /api/devices/:id/status", () => {
+  beforeAll(async () => {
+    const res = await request
+      .post("/api/devices/pair")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        serial_number: "STATUS-001",
+        platform: "instagram",
+        username: "statusshop",
+        platform_user_id: "ig_status_001",
+      });
+    deviceId = res.body.device_id;
+  });
+
+  it("returns device status", async () => {
+    const res = await request
+      .get(`/api/devices/${deviceId}/status`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.current_count).toBeDefined();
+    expect(res.body.platform).toBe("instagram");
+  });
+
+  it("returns 404 for unknown device", async () => {
+    const res = await request
+      .get("/api/devices/00000000-0000-0000-0000-000000000000/status")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/devices/:id/history", () => {
+  beforeAll(async () => {
+    const res = await request
+      .post("/api/devices/pair")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        serial_number: "HISTORY-001",
+        platform: "tiktok",
+        username: "historyshop",
+        platform_user_id: "tt_history_001",
+      });
+    deviceId = res.body.device_id;
+    // Seed a few history rows directly
+    await query(
+      `INSERT INTO count_history (device_id, value)
+       SELECT $1, s.v FROM (VALUES (100),(200),(300)) AS s(v)`,
+      [deviceId],
+    );
+  });
+
+  it("returns count history oldest-first", async () => {
+    const res = await request
+      .get(`/api/devices/${deviceId}/history`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.history)).toBe(true);
+    expect(res.body.history.length).toBe(3);
+    expect(Number(res.body.history[0].value)).toBe(100);
+    expect(Number(res.body.history[2].value)).toBe(300);
+  });
+
+  it("respects the limit query param", async () => {
+    const res = await request
+      .get(`/api/devices/${deviceId}/history?limit=2`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.history.length).toBe(2);
+  });
+
+  it("returns 404 for unknown device", async () => {
+    const res = await request
+      .get("/api/devices/00000000-0000-0000-0000-000000000000/history")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("DELETE /api/devices/:id", () => {
+  let deleteDeviceId;
+
+  beforeAll(async () => {
+    const res = await request
+      .post("/api/devices/pair")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        serial_number: "DELETE-001",
+        platform: "instagram",
+        username: "deleteshop",
+        platform_user_id: "ig_delete_001",
+      });
+    deleteDeviceId = res.body.device_id;
+  });
+
+  it("removes the device", async () => {
+    const res = await request
+      .delete(`/api/devices/${deleteDeviceId}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(204);
+  });
+
+  it("returns 404 after deletion", async () => {
+    const res = await request
+      .delete(`/api/devices/${deleteDeviceId}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects unauthenticated request", async () => {
+    const res = await request.delete(`/api/devices/${deleteDeviceId}`);
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("GET /api/admin/devices", () => {
   it("rejects non-admin user", async () => {
     const res = await request
       .get("/api/admin/devices")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/admin/stats", () => {
+  it("rejects non-admin user", async () => {
+    const res = await request
+      .get("/api/admin/stats")
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/admin/users", () => {
+  it("rejects non-admin user", async () => {
+    const res = await request
+      .get("/api/admin/users")
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(403);
   });

@@ -12,6 +12,11 @@ export async function startPoller() {
   setInterval(reconcile, RECONCILE_MS);
 }
 
+// Called by devices/pair route so new devices start polling immediately
+export async function triggerReconcile() {
+  await reconcile();
+}
+
 async function reconcile() {
   let devices;
   try {
@@ -77,6 +82,12 @@ async function pollDevice(device) {
        VALUES ($1, $2, NOW())
        ON CONFLICT (device_id)
        DO UPDATE SET value = $2, fetched_at = NOW()`,
+      [device.device_id, count],
+    );
+
+    // Append to time-series history for trend charts
+    await query(
+      `INSERT INTO count_history (device_id, value) VALUES ($1, $2)`,
       [device.device_id, count],
     );
 

@@ -45,6 +45,7 @@ describe("GET /api/count/:deviceId", () => {
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(99999);
     expect(res.body.interval).toBeDefined();
+    expect(res.body.display_digits).toBeDefined();
   });
 
   it("rejects missing token", async () => {

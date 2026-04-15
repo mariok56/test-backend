@@ -16,7 +16,7 @@ router.get("/:deviceId", async (req, res) => {
   try {
     // 1. Verify the device exists and token matches
     const deviceResult = await query(
-      `SELECT id, poll_interval_seconds
+      `SELECT id, poll_interval_seconds, display_digits
        FROM devices
        WHERE id = $1 AND device_token = $2`,
       [deviceId, token],
@@ -42,6 +42,7 @@ router.get("/:deviceId", async (req, res) => {
     res.json({
       count: Number(count.value),
       interval: device.poll_interval_seconds,
+      display_digits: device.display_digits,
       fetched_at: count.fetched_at,
     });
   } catch (err) {

@@ -36,6 +36,20 @@ describe("POST /api/auth/register", () => {
       .send({ email: "nopass@test.com" });
     expect(res.status).toBe(400);
   });
+
+  it("rejects invalid email format", async () => {
+    const res = await request
+      .post("/api/auth/register")
+      .send({ email: "notanemail", password: "password123" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects password shorter than 8 characters", async () => {
+    const res = await request
+      .post("/api/auth/register")
+      .send({ email: "short@test.com", password: "abc" });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("POST /api/auth/login", () => {

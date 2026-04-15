@@ -16,11 +16,19 @@ const authLimiter = rateLimit({
 
 router.use(authLimiter);
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // POST /api/auth/register
 router.post("/register", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password)
     return res.status(400).json({ error: "Email and password required" });
+
+  if (!EMAIL_RE.test(email))
+    return res.status(400).json({ error: "Invalid email address" });
+
+  if (password.length < 8)
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
 
   try {
     const hash = await bcrypt.hash(password, 10);

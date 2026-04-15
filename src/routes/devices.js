@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { query, pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { triggerReconcile } from "../poller/index.js";
 
 const router = Router();
 // All routes here require a logged-in dashboard user
@@ -46,6 +47,11 @@ router.post("/pair", async (req, res) => {
     ]);
 
     await client.query("COMMIT");
+
+    // Start polling the new device immediately (don't wait 30s for reconcile)
+    triggerReconcile().catch((err) =>
+      console.error("[poller] trigger after pair failed:", err.message),
+    );
 
     res.status(201).json({
       device_id: device.id,
@@ -142,6 +148,55 @@ router.put("/:id/settings", async (req, res) => {
       return res.status(404).json({ error: "Device not found" });
 
     res.json({ updated: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /api/devices/:id
+// Unpair and remove a device (cascades to social_accounts, counts, count_history)
+router.delete("/:id", async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM devices WHERE id = $1 AND owner_id = $2`,
+      [req.params.id, req.user.userId],
+    );
+
+    if (rowCount === 0)
+      return res.status(404).json({ error: "Device not found" });
+
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /api/devices/:id/history?limit=50
+// Time-series count history for trend charts
+router.get("/:id/history", async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+
+  try {
+    // Verify ownership first
+    const { rows: owns } = await query(
+      `SELECT id FROM devices WHERE id = $1 AND owner_id = $2`,
+      [req.params.id, req.user.userId],
+    );
+    if (owns.length === 0)
+      return res.status(404).json({ error: "Device not found" });
+
+    const { rows } = await query(
+      `SELECT value, recorded_at
+       FROM count_history
+       WHERE device_id = $1
+       ORDER BY recorded_at DESC
+       LIMIT $2`,
+      [req.params.id, limit],
+    );
+
+    res.json({ history: rows.reverse() }); // oldest-first for charting
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
