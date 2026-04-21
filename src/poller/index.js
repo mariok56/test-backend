@@ -1,6 +1,7 @@
 import { query } from "../db.js";
-import { getFollowerCount as getMockCount } from "./providers/mock.js";
 import { getFollowerCount as getInstagramCount } from "./providers/instagram.js";
+
+// device_id -> intervalId
 const activeIntervals = new Map();
 
 const RECONCILE_MS = 30_000; // re-check DB for new/removed devices every 30s
@@ -84,12 +85,15 @@ async function pollDevice(device) {
       [device.device_id, count],
     );
 
+    // Append to time-series history for trend charts
+    await query(
+      `INSERT INTO count_history (device_id, value) VALUES ($1, $2)`,
+      [device.device_id, count],
+    );
+
     console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {
-    console.error(
-      `[poller] error for device ${device.device_id}:`,
-      err.message,
-    );
+    console.error(`[poller] error for device ${device.device_id}:`, err.message);
   }
 }
 
@@ -98,7 +102,7 @@ async function fetchCount(device) {
     case "instagram":
       return getInstagramCount(device.access_token, device.platform_user_id);
     case "tiktok":
-      return getMockCount(device.platform_user_id);
+      throw new Error("TikTok provider not yet implemented");
     default:
       throw new Error(`Unknown platform: ${device.platform}`);
   }
