@@ -198,9 +198,13 @@ describe("GET /api/devices/:id/history", () => {
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.history)).toBe(true);
-    expect(res.body.history.length).toBe(3);
-    expect(Number(res.body.history[0].value)).toBe(100);
-    expect(Number(res.body.history[2].value)).toBe(300);
+    // Poller may insert one row immediately on pair, so there are >= 3 rows.
+    // The seeded values (100, 200, 300) are always the last 3, oldest-first.
+    expect(res.body.history.length).toBeGreaterThanOrEqual(3);
+    const last3 = res.body.history.slice(-3);
+    expect(Number(last3[0].value)).toBe(100);
+    expect(Number(last3[1].value)).toBe(200);
+    expect(Number(last3[2].value)).toBe(300);
   });
 
   it("respects the limit query param", async () => {
@@ -208,6 +212,7 @@ describe("GET /api/devices/:id/history", () => {
       .get(`/api/devices/${deviceId}/history?limit=2`)
       .set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);
+    // limit=2 returns the 2 most-recent rows (before reversal) = last 2 seeded
     expect(res.body.history.length).toBe(2);
   });
 

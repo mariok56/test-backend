@@ -1,5 +1,5 @@
 import { query } from "../db.js";
-import { getFollowerCount as getMockCount } from "./providers/mock.js";
+import { getFollowerCount as getInstagramCount } from "./providers/instagram.js";
 
 // device_id -> intervalId
 const activeIntervals = new Map();
@@ -93,13 +93,17 @@ async function pollDevice(device) {
 
     console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {
-    console.error(`[poller] error for device ${device.device_id}:`, err.message);
+    console.error(
+      `[poller] error for device ${device.device_id}:`,
+      err.message,
+    );
   }
 }
 
 async function fetchCount(device) {
   switch (device.platform) {
     case "instagram":
+      return getInstagramCount(device.access_token, device.platform_user_id);
     case "tiktok":
       return getMockCount(device.platform_user_id);
     default:
