@@ -1,6 +1,5 @@
-import { query } from "../db.js";
+import { getFollowerCount as getMockCount } from "./providers/mock.js";
 import { getFollowerCount as getInstagramCount } from "./providers/instagram.js";
-
 // device_id -> intervalId
 const activeIntervals = new Map();
 
