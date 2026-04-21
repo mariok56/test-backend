@@ -1,6 +1,6 @@
+import { query } from "../db.js";
 import { getFollowerCount as getMockCount } from "./providers/mock.js";
 import { getFollowerCount as getInstagramCount } from "./providers/instagram.js";
-// device_id -> intervalId
 const activeIntervals = new Map();
 
 const RECONCILE_MS = 30_000; // re-check DB for new/removed devices every 30s
@@ -81,12 +81,6 @@ async function pollDevice(device) {
        VALUES ($1, $2, NOW())
        ON CONFLICT (device_id)
        DO UPDATE SET value = $2, fetched_at = NOW()`,
-      [device.device_id, count],
-    );
-
-    // Append to time-series history for trend charts
-    await query(
-      `INSERT INTO count_history (device_id, value) VALUES ($1, $2)`,
       [device.device_id, count],
     );
 
