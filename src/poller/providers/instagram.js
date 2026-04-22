@@ -10,7 +10,7 @@ export async function getFollowerCount(accessToken, platformUserId) {
   return data.followers_count;
 }
 
-async function refreshAllTokens() {
+export async function refreshAllTokens() {
   try {
     const { rows } = await query(
       `SELECT id, access_token, username
