@@ -164,28 +164,20 @@ router.put("/:id/settings", async (req, res) => {
 
 // DELETE /api/devices/:id
 // Unpair and remove a device (cascades to social_accounts, counts, count_history)
-
 router.delete("/:id", async (req, res) => {
   try {
     const { rowCount } = await query(
-      `DELETE FROM devices
-       WHERE id = $1 AND owner_id = $2`,
+      `DELETE FROM devices WHERE id = $1 AND owner_id = $2`,
       [req.params.id, req.user.userId],
     );
 
-    if (rowCount === 0) {
+    if (rowCount === 0)
       return res.status(404).json({ error: "Device not found" });
-    }
 
-    // Reconcile poller immediately so stale intervals are removed now
-    triggerReconcile().catch((err) =>
-      console.error("[poller] trigger after delete failed:", err.message),
-    );
-
-    return res.status(204).send();
+    res.status(204).send();
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
