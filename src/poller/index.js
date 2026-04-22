@@ -86,10 +86,6 @@ async function pollDevice(device) {
     );
 
     // Append to time-series history for trend charts
-    await query(
-      `INSERT INTO count_history (device_id, value) VALUES ($1, $2)`,
-      [device.device_id, count],
-    );
 
     console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {
