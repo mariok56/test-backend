@@ -108,6 +108,14 @@ function scheduleDevice(device) {
 async function pollDevice(device) {
   try {
     const count = await fetchCount(device);
+
+    const { rows } = await query(
+      `SELECT value FROM counts WHERE device_id = $1`,
+      [device.device_id],
+    );
+
+    const previousCount = rows[0]?.value;
+
     await query(
       `INSERT INTO counts (device_id, value, fetched_at)
        VALUES ($1, $2, NOW())
@@ -115,7 +123,13 @@ async function pollDevice(device) {
        DO UPDATE SET value = $2, fetched_at = NOW()`,
       [device.device_id, count],
     );
-    console.log(`[poller] device ${device.device_id} → ${count}`);
+
+    // Only log when count changes -- not every poll
+    if (Number(previousCount) !== count) {
+      console.log(
+        `[poller] device ${device.device_id} → ${count} (was ${previousCount})`,
+      );
+    }
   } catch (err) {
     console.error(
       `[poller] error for device ${device.device_id}:`,
