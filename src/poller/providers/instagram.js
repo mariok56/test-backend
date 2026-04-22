@@ -10,30 +10,11 @@ export async function getFollowerCount(accessToken, platformUserId) {
   return data.followers_count;
 }
 
-export async function refreshAllTokens() {
-  try {
-    const { rows } = await query(
-      `SELECT id, access_token, username
-       FROM social_accounts
-       WHERE platform = 'instagram'`,
-    );
-    if (rows.length === 0) return;
-
-    for (const account of rows) {
-      try {
-        const newToken = await refreshToken(account.access_token);
-        await query(
-          `UPDATE social_accounts SET access_token = $1 WHERE id = $2`,
-          [newToken, account.id],
-        );
-      } catch (err) {
-        console.error(
-          `[token-refresh] FAILED for @${account.username}:`,
-          err.message,
-        );
-      }
-    }
-  } catch (err) {
-    console.error("[token-refresh] query failed:", err.message);
-  }
+export async function refreshToken(accessToken) {
+  const res = await fetch(
+    `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`,
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.access_token;
 }
