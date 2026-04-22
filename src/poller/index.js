@@ -1,57 +1,20 @@
 import { query } from "../db.js";
-import {
-  getFollowerCount as getInstagramCount,
-  refreshToken,
-} from "./providers/instagram.js";
+import { getFollowerCount as getInstagramCount } from "./providers/instagram.js";
 
+// device_id -> intervalId
 const activeIntervals = new Map();
-const RECONCILE_MS = 30_000;
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+const RECONCILE_MS = 30_000; // re-check DB for new/removed devices every 30s
 
 export async function startPoller() {
   console.log("[poller] starting...");
   await reconcile();
   setInterval(reconcile, RECONCILE_MS);
-
-  // Refresh Instagram tokens every 30 days
-  await refreshAllTokens();
-  setInterval(refreshAllTokens, THIRTY_DAYS_MS);
 }
 
+// Called by devices/pair route so new devices start polling immediately
 export async function triggerReconcile() {
   await reconcile();
-}
-
-async function refreshAllTokens() {
-  console.log("[token-refresh] starting refresh cycle...");
-  try {
-    const { rows } = await query(
-      `SELECT id, access_token, username
-       FROM social_accounts
-       WHERE platform = 'instagram'`,
-    );
-    if (rows.length === 0) {
-      console.log("[token-refresh] no instagram accounts found");
-      return;
-    }
-    for (const account of rows) {
-      try {
-        const newToken = await refreshToken(account.access_token);
-        await query(
-          `UPDATE social_accounts SET access_token = $1 WHERE id = $2`,
-          [newToken, account.id],
-        );
-        console.log(`[token-refresh] refreshed token for @${account.username}`);
-      } catch (err) {
-        console.error(
-          `[token-refresh] FAILED for @${account.username}:`,
-          err.message,
-        );
-      }
-    }
-  } catch (err) {
-    console.error("[token-refresh] query failed:", err.message);
-  }
 }
 
 async function reconcile() {
@@ -76,6 +39,7 @@ async function reconcile() {
 
   const currentIds = new Set(devices.map((d) => d.device_id));
 
+  // Clear intervals for devices no longer in the DB
   for (const [id, intervalId] of activeIntervals) {
     if (!currentIds.has(id)) {
       clearInterval(intervalId);
@@ -84,6 +48,7 @@ async function reconcile() {
     }
   }
 
+  // Start intervals for newly paired devices
   for (const device of devices) {
     if (!activeIntervals.has(device.device_id)) {
       scheduleDevice(device);
@@ -99,7 +64,10 @@ function scheduleDevice(device) {
   console.log(
     `[poller] scheduling device ${device.device_id} every ${device.poll_interval_seconds}s`,
   );
+
   const intervalMs = device.poll_interval_seconds * 1000;
+
+  // Poll immediately once, then on interval
   pollDevice(device);
   const intervalId = setInterval(() => pollDevice(device), intervalMs);
   activeIntervals.set(device.device_id, intervalId);
@@ -109,13 +77,6 @@ async function pollDevice(device) {
   try {
     const count = await fetchCount(device);
 
-    const { rows } = await query(
-      `SELECT value FROM counts WHERE device_id = $1`,
-      [device.device_id],
-    );
-
-    const previousCount = rows[0]?.value;
-
     await query(
       `INSERT INTO counts (device_id, value, fetched_at)
        VALUES ($1, $2, NOW())
@@ -124,12 +85,13 @@ async function pollDevice(device) {
       [device.device_id, count],
     );
 
-    // Only log when count changes -- not every poll
-    if (Number(previousCount) !== count) {
-      console.log(
-        `[poller] device ${device.device_id} → ${count} (was ${previousCount})`,
-      );
-    }
+    // Append to time-series history for trend charts
+    await query(
+      `INSERT INTO count_history (device_id, value) VALUES ($1, $2)`,
+      [device.device_id, count],
+    );
+
+    console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {
     console.error(
       `[poller] error for device ${device.device_id}:`,
