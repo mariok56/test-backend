@@ -75,6 +75,22 @@ function scheduleDevice(device) {
 
 async function pollDevice(device) {
   try {
+    const { rows } = await query(`SELECT 1 FROM devices WHERE id = $1`, [
+      device.device_id,
+    ]);
+
+    if (rows.length === 0) {
+      const intervalId = activeIntervals.get(device.device_id);
+
+      if (intervalId) {
+        clearInterval(intervalId);
+        activeIntervals.delete(device.device_id);
+      }
+
+      console.log(`[poller] removed stale interval for ${device.device_id}`);
+      return;
+    }
+
     const count = await fetchCount(device);
 
     await query(
@@ -84,8 +100,6 @@ async function pollDevice(device) {
        DO UPDATE SET value = $2, fetched_at = NOW()`,
       [device.device_id, count],
     );
-
-    // Append to time-series history for trend charts
 
     console.log(`[poller] device ${device.device_id} → ${count}`);
   } catch (err) {

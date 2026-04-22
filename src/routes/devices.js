@@ -38,7 +38,13 @@ router.post("/pair", async (req, res) => {
       `INSERT INTO social_accounts
          (device_id, platform, platform_user_id, username, access_token)
        VALUES ($1, $2, $3, $4, $5)`,
-      [device.id, platform, platform_user_id, username, access_token || "mock_token"],
+      [
+        device.id,
+        platform,
+        platform_user_id,
+        username,
+        access_token || "mock_token",
+      ],
     );
 
     // 3. Seed an initial count of 0
@@ -61,7 +67,9 @@ router.post("/pair", async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     if (err.code === "23505")
-      return res.status(409).json({ error: "Serial number already registered" });
+      return res
+        .status(409)
+        .json({ error: "Serial number already registered" });
     console.error(err);
     res.status(500).json({ error: "Internal server error" });
   } finally {
@@ -156,20 +164,28 @@ router.put("/:id/settings", async (req, res) => {
 
 // DELETE /api/devices/:id
 // Unpair and remove a device (cascades to social_accounts, counts, count_history)
+
 router.delete("/:id", async (req, res) => {
   try {
     const { rowCount } = await query(
-      `DELETE FROM devices WHERE id = $1 AND owner_id = $2`,
+      `DELETE FROM devices
+       WHERE id = $1 AND owner_id = $2`,
       [req.params.id, req.user.userId],
     );
 
-    if (rowCount === 0)
+    if (rowCount === 0) {
       return res.status(404).json({ error: "Device not found" });
+    }
 
-    res.status(204).send();
+    // Reconcile poller immediately so stale intervals are removed now
+    triggerReconcile().catch((err) =>
+      console.error("[poller] trigger after delete failed:", err.message),
+    );
+
+    return res.status(204).send();
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
